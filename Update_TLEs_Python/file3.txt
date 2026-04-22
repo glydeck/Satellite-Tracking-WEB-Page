@@ -1,0 +1,234 @@
+};
+
+let cur=SATS[0], satrec=null, tleCache={};
+let showPast=true, showFuture=true, showFP=false;
+let proj, path, world;
+
+function initProj() {
+  const el = document.getElementById('mapwrap');
+  const W=el.clientWidth, H=el.clientHeight;
+  d3.select('#mapsvg').attr('viewBox',`0 0 ${W} ${H}`);
+  proj = d3.geoNaturalEarth1().scale(W/6.3).translate([W/2,H/2]);
+  path = d3.geoPath().projection(proj);
+}
+
+function drawBase(w) {
+  world = w;
+  const land    = topojson.feature(w, w.objects.countries);
+  const borders = topojson.mesh(w, w.objects.countries, (a,b)=>a!==b);
+  d3.select('#g-grat').selectAll('path')
+    .data([d3.geoGraticule()()])
+    .join('path').attr('class','graticule').attr('d',path);
+  d3.select('#g-land').selectAll('path')
+    .data(land.features)
+    .join('path').attr('class','countries').attr('d',path);
+  d3.select('#g-borders').selectAll('path')
+    .data([borders])
+    .join('path').attr('class','borders').attr('d',path);
+}
+
+function propAt(sr, d) {
+  const p = satellite.propagate(sr, d);
+  if(!p.position) return null;
+  const gmst = satellite.gstime(d);
+  const geo  = satellite.eciToGeodetic(p.position, gmst);
+  return {
+    lat:  satellite.degreesLat(geo.latitude),
+    lon:  satellite.degreesLong(geo.longitude),
+    alt:  geo.height,
+    spd:  Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z),
+  };
+}
+
+function buildTrack(sr) {
+  const now=Date.now(), pts=[];
+  for(let s=-45*60; s<=180*60; s+=30) {
+    const st = propAt(sr, new Date(now+s*1000));
+    if(st) pts.push({...st, past:s<0});
+  }
+  return pts;
+}
+
+function splitSegs(pts) {
+  const segs=[[]];
+  pts.forEach((p,i)=>{
+    if(i>0 && Math.abs(p.lon-pts[i-1].lon)>160) segs.push([]);
+    segs[segs.length-1].push(p);
+  });
+  return segs.filter(s=>s.length>1);
+}
+
+function toGeoFeatures(pts) {
+  return splitSegs(pts).map(seg=>({
+    type:'Feature',
+    geometry:{ type:'LineString', coordinates:seg.map(p=>[p.lon,p.lat]) }
+  }));
+}
+
+function fpPts(lat,lon,altKm) {
+  const R=6371, rho=Math.acos(R/(R+altKm)), pts=[];
+  for(let i=0;i<=120;i++){
+    const az=i/120*2*Math.PI, laR=lat*Math.PI/180;
+    const dLa=Math.asin(Math.sin(laR)*Math.cos(rho)+Math.cos(laR)*Math.sin(rho)*Math.cos(az));
+    const dLo=lon+Math.atan2(Math.sin(az)*Math.sin(rho)*Math.cos(laR),
+               Math.cos(rho)-Math.sin(laR)*Math.sin(dLa))*180/Math.PI;
+    pts.push([(dLo+540)%360-180, dLa*180/Math.PI]);
+  }
+  return pts;
+}
+
+function renderTrack() {
+  if(!satrec) return;
+  const all  = buildTrack(satrec);
+  const past = all.filter(p=>p.past);
+  const fut  = all.filter(p=>!p.past);
+  const c    = cur.color;
+
+  const pg=d3.select('#g-past'); pg.selectAll('*').remove();
+  if(showPast) pg.selectAll('path').data(toGeoFeatures(past))
+    .join('path').attr('class','track-past').attr('stroke',c).attr('d',path);
+
+  const fg=d3.select('#g-future'); fg.selectAll('*').remove();
+  if(showFuture) fg.selectAll('path').data(toGeoFeatures(fut))
+    .join('path').attr('class','track-future').attr('stroke',c).attr('d',path);
+}
+
+function renderSat(st) {
+  if(!st) return;
+  const xy=proj([st.lon,st.lat]);
+  if(!xy) return;
+  const [x,y]=xy, c=cur.color;
+
+  const fpg=d3.select('#g-fp'); fpg.selectAll('*').remove();
+  if(showFP) {
+    const fp=fpPts(st.lat,st.lon,st.alt);
+    fpg.append('path')
+      .datum({type:'Feature',geometry:{type:'Polygon',coordinates:[fp]}})
+      .attr('class','footprint').attr('stroke',c).attr('fill',c).attr('d',path);
+  }
+
+  const g=d3.select('#g-sat'); g.selectAll('*').remove();
+  // outer halos
+  g.append('circle').attr('cx',x).attr('cy',y).attr('r',16)
+   .attr('fill','none').attr('stroke',c).attr('stroke-width',.5).attr('opacity',.2);
+  g.append('circle').attr('cx',x).attr('cy',y).attr('r',11)
+   .attr('fill','none').attr('stroke',c).attr('stroke-width',.8).attr('opacity',.4);
+  // crosshairs
+  [[-18,0,-7,0],[7,0,18,0],[0,-18,0,-7],[0,7,0,18]].forEach(([x1,y1,x2,y2])=>
+    g.append('line').attr('x1',x+x1).attr('y1',y+y1).attr('x2',x+x2).attr('y2',y+y2)
+     .attr('stroke',c).attr('stroke-width',1.2).attr('opacity',.75)
+  );
+  // glow dot
+  g.append('circle').attr('cx',x).attr('cy',y).attr('r',4.5)
+   .attr('fill',c).attr('filter','url(#glow)');
+  // solid core
+  g.append('circle').attr('cx',x).attr('cy',y).attr('r',2.5).attr('fill',c);
+}
+
+function updatePanel(st) {
+  if(!st||!satrec) return;
+  const s=v=>`${v>=0?'+':''}${v.toFixed(3)}°`;
+  document.getElementById('tPos').textContent = `${s(st.lat)}  ${s(st.lon)}`;
+  document.getElementById('tLat').textContent = s(st.lat);
+  document.getElementById('tLon').textContent = s(st.lon);
+  document.getElementById('tAlt').innerHTML   = `${st.alt.toFixed(1)}<span class="tu"> km</span>`;
+  document.getElementById('tSpd').innerHTML   = `${st.spd.toFixed(3)}<span class="tu"> km/s</span>`;
+  const mu=398600.4418, n=satrec.no/60;
+  const a=(Math.cbrt(mu/(n*n))).toFixed(1)+' km';
+  const ey=satrec.epochyr<57?2000+satrec.epochyr:1900+satrec.epochyr;
+  const eDate=new Date(Date.UTC(ey,0,1)+(satrec.epochdays-1)*86400000);
+  const ageM=(Date.now()-eDate)/60000;
+  document.getElementById('eSma').textContent=a;
+  document.getElementById('eEcc').textContent=satrec.ecco.toFixed(7);
+  document.getElementById('eInc').textContent=(satrec.inclo*180/Math.PI).toFixed(4)+'°';
+  document.getElementById('ePer').textContent=(2*Math.PI/n/60).toFixed(2)+' min';
+  document.getElementById('eRpd').textContent=(satrec.no*60*24/(2*Math.PI)).toFixed(4);
+  document.getElementById('eAge').textContent=ageM<1440?`${(ageM/60).toFixed(1)} hrs ago`:`${(ageM/1440).toFixed(1)} days ago`;
+}
+
+async function fetchTLE(id) {
+  if(tleCache[id]) return tleCache[id];
+  try {
+    const r=await fetch(`https://celestrak.org/GP/element/CATNR/${id}/?FORMAT=TLE`,
+                        {signal:AbortSignal.timeout(5000)});
+    if(!r.ok) throw 0;
+    const txt=(await r.text()).trim().split('\n').map(l=>l.trim()).filter(Boolean);
+    if(txt.length<3) throw 0;
+    return (tleCache[id]={name:txt[0],l1:txt[1],l2:txt[2],live:true});
+  } catch {
+    const fb=FB[id];
+    return (tleCache[id]={name:SATS.find(s=>s.id===id)?.name||String(id),l1:fb[0],l2:fb[1],live:false});
+  }
+}
+
+async function loadSat(sat) {
+  cur=sat;
+  document.getElementById('statusText').textContent=`FETCHING ${sat.name}…`;
+  document.querySelectorAll('.sbtn').forEach((b,i)=>b.classList.toggle('active',SATS[i]===sat));
+  const tle=await fetchTLE(sat.id);
+  satrec=satellite.twoline2satrec(tle.l1,tle.l2);
+  const src=tle.live?'🟢 LIVE · CelesTrak':'🟡 CACHED · Fallback';
+  document.getElementById('tleBox').innerHTML=
+    `<span class="tlen">${tle.name}</span>\n${tle.l1}\n${tle.l2}\n\n<span style="color:#1a3a5c">${src}</span>`;
+  renderTrack();
+  const st=propAt(satrec,new Date());
+  renderSat(st); updatePanel(st);
+  document.getElementById('statusText').textContent=`TRACKING ${sat.name}`;
+}
+
+function tog(w) {
+  if(w==='past')   { showPast   =!showPast;   document.getElementById('togPast').classList.toggle('on',showPast); }
+  if(w==='future') { showFuture =!showFuture; document.getElementById('togFuture').classList.toggle('on',showFuture); }
+  if(w==='fp')     { showFP     =!showFP;     document.getElementById('togFP').classList.toggle('on',showFP); }
+  renderTrack();
+  const st=satrec?propAt(satrec,new Date()):null;
+  renderSat(st);
+}
+
+window.addEventListener('resize',()=>{
+  initProj(); if(world) drawBase(world); renderTrack();
+  const st=satrec?propAt(satrec,new Date()):null; renderSat(st);
+});
+
+let lastTrack=0;
+function loop() {
+  const now=Date.now();
+  document.getElementById('clock').textContent=new Date().toUTCString().slice(17,25)+' UTC';
+  if(satrec) {
+    const st=propAt(satrec,new Date(now));
+    updatePanel(st); renderSat(st);
+    if(now-lastTrack>30000){ renderTrack(); lastTrack=now; }
+  }
+  requestAnimationFrame(loop);
+}
+
+(async()=>{
+  const list=document.getElementById('satList');
+  SATS.forEach((s,i)=>{
+    const b=document.createElement('button');
+    b.className='sbtn'+(i===0?' active':'');
+    b.innerHTML=`<span style="color:${s.color}">◉</span> ${s.name} <span class="cid">#${s.id}</span>`;
+    b.onclick=()=>loadSat(s);
+    list.appendChild(b);
+  });
+
+  initProj();
+  document.getElementById('loaderMsg').textContent='LOADING WORLD MAP…';
+  try {
+    world=await d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+  } catch {
+    world=await d3.json('https://unpkg.com/world-atlas@2/countries-110m.json');
+  }
+  drawBase(world);
+
+  document.getElementById('loaderMsg').textContent='ACQUIRING SIGNAL…';
+  await loadSat(SATS[0]);
+
+  const ldr=document.getElementById('loader');
+  ldr.classList.add('gone');
+  setTimeout(()=>ldr.remove(),500);
+  loop();
+})();
+</script>
+</body>
+</html>

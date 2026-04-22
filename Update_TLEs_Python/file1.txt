@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbital Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.1.3/satellite.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #04080d;
+    --panel:   #080f18;
+    --border:  #0e2440;
+    --accent:  #00cfff;
+    --green:   #00ffaa;
+    --warn:    #ff6b35;
+    --text:    #a8cce8;
+    --dim:     #3e7aad;
+    --mono:    'Share Tech Mono', monospace;
+    --sans:    'Exo 2', sans-serif;
+  }
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; background:var(--bg); }
+
+  body {
+    font-family: var(--sans);
+    color: var(--text);
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 280px 1fr;
+    height: 100vh;
+  }
+
+  header {
+    grid-column: 1/-1;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 18px;
+  }
+  .logo { font-family:var(--mono); font-size:15px; color:var(--accent); letter-spacing:4px; }
+  .logo em { color:var(--green); font-style:normal; }
+  #statusText { font-family:var(--mono); font-size:10px; color:var(--green); letter-spacing:2px; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--green);
+         animation: blink 1.6s ease-in-out infinite; flex-shrink:0; }
+  @keyframes blink { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,255,170,.5)}
+                     50%{opacity:.5;box-shadow:0 0 0 5px rgba(0,255,170,0)} }
+  #clock { font-family:var(--mono); font-size:12px; color:var(--accent);
+           letter-spacing:2px; margin-left:auto; }
+
+  aside {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto; overflow-x: hidden;
+    display: flex; flex-direction: column;
+  }
+  aside::-webkit-scrollbar { width:3px; }
+  aside::-webkit-scrollbar-thumb { background:var(--border); }
+
+  .sec { padding:12px 14px; border-bottom:1px solid var(--border); }
+  .sec-lbl { font-family:var(--mono); font-size:9px; color:var(--dim);
+              letter-spacing:2px; text-transform:uppercase; margin-bottom:9px; }
+
+  .sbtn {
+    width:100%; background:transparent; border:1px solid var(--border);
+    color:var(--text); font-family:var(--sans); font-size:12px;
+    padding:7px 10px; text-align:left; cursor:pointer; border-radius:3px;
+    margin-bottom:5px; display:flex; align-items:center; gap:8px;
+    transition: border-color .15s, color .15s;
+  }
+  .sbtn:hover  { border-color:var(--accent); color:var(--accent); }
+  .sbtn.active { border-color:var(--green); color:var(--green);
+                 background:rgba(0,255,170,.04); }
+  .sbtn .cid   { font-family:var(--mono); font-size:9px; color:var(--dim); margin-left:auto; }
+
+  .tgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .tcell { background:rgba(0,207,255,.03); border:1px solid var(--border);
+           border-radius:3px; padding:7px 9px; }
+  .tcell.full { grid-column:1/-1; }
+  .tlbl { font-size:8px; color:var(--dim); letter-spacing:1px;
+          text-transform:uppercase; margin-bottom:3px; }
+  .tval { font-family:var(--mono); font-size:13px; color:var(--accent); }
+  .tval.g { color:var(--green); }
+  .tu { font-size:8px; color:var(--dim); }
+
+  .erow { display:flex; justify-content:space-between; align-items:baseline;
+          padding:4px 0; border-bottom:1px solid rgba(14,36,64,.8); font-size:11px; }
+  .erow:last-child { border:none; }
+  .en { color:var(--dim); }
+  .ev { font-family:var(--mono); }
+
+  .trow { display:flex; justify-content:space-between; align-items:center;
+          padding:4px 0; font-size:11px; color:var(--dim); }
+  .tog  { width:32px; height:18px; background:var(--border); border-radius:9px;
+          cursor:pointer; position:relative; transition:background .2s; flex-shrink:0; }
+  .tog.on { background:var(--green); }
+  .tog::after { content:''; position:absolute; top:3px; left:3px;
+                width:12px; height:12px; background:#fff; border-radius:50%;
+                transition:transform .2s; }
+  .tog.on::after { transform:translateX(14px); }
+
+  .tlebox { background:#000; border:1px solid var(--border); border-radius:3px;
+            padding:7px; font-family:var(--mono); font-size:9px; color:var(--dim);
+            line-height:1.8; word-break:break-all; white-space:pre-wrap; }
+  .tlen { color:var(--accent); }
+
+  #mapwrap { position:relative; overflow:hidden; background:var(--bg); }
+  #mapsvg  { width:100%; height:100%; display:block; }
+
+  .graticule    { fill:none; stroke:#2e5990; stroke-width:.4; }
+  .countries    { fill:rgba(0,207,255,.03); stroke:#00cfff; stroke-width:.7; opacity:.7; }
+  .borders      { fill:none; stroke:#00cfff; stroke-width:.3; opacity:.3; }
+  .track-past   { fill:none; stroke-width:1.3; stroke-dasharray:5 4; opacity:.55; }
+  .track-future { fill:none; stroke-width:1.5; opacity:.9; }
+  .footprint    { fill-opacity:.05; stroke-width:.9; stroke-dasharray:3 4; opacity:.6; }
+
+  #loader { position:fixed; inset:0; background:var(--bg); z-index:99;
+            display:flex; flex-direction:column; align-items:center;
+            justify-content:center; gap:14px; transition:opacity .4s; }
+  #loader.gone { opacity:0; pointer-events:none; }
+  .lring { width:52px; height:52px; border:1.5px solid var(--border);
+           border-top-color:var(--accent); border-radius:50%;
+           animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg) } }
+  .ltxt { font-family:var(--mono); font-size:11px; color:var(--dim); letter-spacing:2px; }
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="lring"></div>
+  <div class="ltxt" id="loaderMsg">LOADING WORLD MAP…</div>
+</div>
+
+<header>
+  <div class="logo">KD6NEW<em>·</em>ORBITAL<em>·</em>TRACKER</div>
+  <div class="dot"></div>
+  <div id="statusText">INITIALIZING</div>
+  <div id="clock">--:--:-- UTC</div>
+</header>
+
+<aside>
+  <div class="sec">
+    <div class="sec-lbl">Satellite</div>
+    <div id="satList"></div>
+  </div>
+  <div class="sec">
+    <div class="sec-lbl">Live Telemetry</div>
+    <div class="tgrid">
+      <div class="tcell full">
+        <div class="tlbl">Position</div>
+        <div class="tval g" id="tPos">-- ° --°</div>
+      </div>
+      <div class="tcell"><div class="tlbl">Altitude</div>
+        <div class="tval" id="tAlt">---<span class="tu"> km</span></div></div>
+      <div class="tcell"><div class="tlbl">Speed</div>
+        <div class="tval" id="tSpd">---<span class="tu"> km/s</span></div></div>
+      <div class="tcell"><div class="tlbl">Lat</div>
+        <div class="tval" id="tLat">---</div></div>
+      <div class="tcell"><div class="tlbl">Lon</div>
+        <div class="tval" id="tLon">---</div></div>
+    </div>
+  </div>
+  <div class="sec">
+    <div class="sec-lbl">Orbital Elements</div>
+    <div class="erow"><span class="en">Semi-major axis</span><span class="ev" id="eSma">—</span></div>
+    <div class="erow"><span class="en">Eccentricity</span><span class="ev" id="eEcc">—</span></div>
+    <div class="erow"><span class="en">Inclination</span><span class="ev" id="eInc">—</span></div>
+    <div class="erow"><span class="en">Period</span><span class="ev" id="ePer">—</span></div>
+    <div class="erow"><span class="en">Rev / day</span><span class="ev" id="eRpd">—</span></div>
+    <div class="erow"><span class="en">TLE age</span><span class="ev" id="eAge">—</span></div>
+  </div>
+  <div class="sec">
+    <div class="sec-lbl">Display</div>
+    <div class="trow"><span>Past track (45 min)</span>
+      <div class="tog on" id="togPast" onclick="tog('past')"></div></div>
+    <div class="trow"><span>Future track (3 hours)</span>
+      <div class="tog on" id="togFuture" onclick="tog('future')"></div></div>
+    <div class="trow"><span>Coverage footprint</span>
+      <div class="tog" id="togFP" onclick="tog('fp')"></div></div>
+  </div>
+  <div class="sec">
+    <div class="sec-lbl">TLE Source</div>
+    <div class="tlebox" id="tleBox">—</div>
+  </div>
+</aside>
+
+<div id="mapwrap">
+  <svg id="mapsvg">
+    <defs>
+      <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="3.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glow2" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="1.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g id="g-grat"></g>
+    <g id="g-land"></g>
+    <g id="g-borders"></g>
+    <g id="g-past"></g>
+    <g id="g-future"></g>
+    <g id="g-fp"></g>
+    <g id="g-sat"></g>
+  </svg>
+</div>
+
+<script>
+const SATS = [
+  { name:'ISS',       id:25544, color:'#00ffaa' },
+  { name:'AO-27',     id:22825, color:'#00cfff' },
+  { name:'FUNcube-1', id:39444, color:'#ff6b35' },
+  { name:'AO-91',     id:43017, color:'#c084fc' },
+  { name:'AO-123',    id:61781, color:'#fbbf24' },
+  { name:'SO-50',     id:27607, color:'#fb2222' },
+];
+const FB = {
