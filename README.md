@@ -1,6 +1,6 @@
 -----------------------------------------------
 # Satellite Tracking Program
-## Built by Vibe Coding using Anthropic Claude AI
+## Built with Vibe Coding using Anthropic Claude AI
 #### Created by glydeck 4/17/2026
 -----------------------------------------------
 ### Screen Shot
