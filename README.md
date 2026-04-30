@@ -14,7 +14,7 @@ This satellite tracker was Vibe Coded using **Anthropic Claude AI** strictly as 
 - Colors for the map & some fonts were dim and hard to see.
 
 ### Example:
-- [**See it Work**](http://glydeck.com/satellite_tracker.html)
+- [**See it Work**](http://glydeck.com/satellite/satellite_tracker.html)
 
 ### Requirements
 To use the **satellite_tracker.html** the only requirements is an Internet web browser. To use the Jupyter Notebook version of the updater requires running an instance of **Jupyter Lab (https://jupyter.org/)**. The stand alone python version of the updater requires Python 3. Both the Jupyter Lab version and Python 3 version will require that the **"requests"** module be installed.
