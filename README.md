@@ -7,7 +7,7 @@
 ![Screen Shot](./images/Screen_Shot.png) 
 
 ### Introduction
-This satellite tracker was Vibe Coded using **Anthropic Claude AI** strictly as an experiment. The results were so good that I'm using and sharing it with fellow amateur radio operaters to get current information on the location of some of the more popular satellites. The original page created by **Claude** did have some short falls that we're easily corrected.
+This satellite tracker was Vibe Coded using **Anthropic Claude AI** strictly as an experiment. The results were so good that I'm using and sharing it with fellow amateur radio operaters to get current information on the location of some of the more popular amateur radio satellites. The original page created by **Claude** did have some short falls that we're easily corrected.
 
 - The Keplarian elements retrieved by Claude were very out of date.
 - The preview of the ground track was only 45 minutes.
@@ -28,7 +28,7 @@ To use the **satellite_tracker.html** the only requirements is an Internet web b
       file2.txt                    --File used to build WEB page
 
 ### Python Script to update elements
-The Python code used here was developed with **Jupyter Lab** as a notebook file. After successful testing of the Jupyter Lab notebook a single Python file was created that could be used independently. Both the notebook and python files retrieve the most current amateur satellite Keplerian elements from **celestrak.org**. 
+The Python code used here was developed with **Jupyter Lab** as a notebook file. After successful testing of the Jupyter Lab notebook a single Python file was created that could be used independently of **Jupyter Lab**. Both the notebook and python files retrieve the most current amateur satellite Keplerian elements from **celestrak.org**. 
 
 ### Usage
 When updating the the html file with fresh Keplerian elements it is only necessary to have the following three files in a folder.
@@ -49,7 +49,7 @@ When either the notebook or python versions are run three addtional files will b
 - satellite_tracker.html
  
 ### Changing, Adding or Removing Satellites
-Changing the satelites in the web page requires editing the javascript array **SATS =** in file1.txt. This array is at the end of the file starting at line 212.  To change a satellite update **name:** with the name of the satellite and **id:** with the NORAD number of the satellite. The **color:** will be the hexidecimal color of the ground track.
+Changing the satelites in the web page requires editing the javascript array '**SATS =**' in file1.txt. This array is at the end of the file starting at line 212.  To change a satellite update **name:** with the name of the satellite and **id:** with the NORAD number of the satellite. The **color:** will be the hexidecimal color of the ground track.
 ```
 const SATS = [
   { name:'ISS',       id:25544, color:'#00ffaa' },
@@ -60,7 +60,7 @@ const SATS = [
   { name:'SO-50',     id:27607, color:'#fb2222' },
 ];
 ```
-Next, the notebook or python code needs to be updated with the new NORAD numbers. The NORAD number appears in two search strings and the print to file statement. Adding a satellite requires adding the satellite to the array and duplicating and adding the block of code in the python program.
+Next, the notebook or python code needs to be updated with the new NORAD numbers. The NORAD number appears in two search strings and the print to file statement. Adding a satellite requires adding the satellite to the array and duplicating and adding this block of code with the new NORAD number to the python program starting at line 148 in the python file '**updateSatelliteTracker.py**'.
 ```
 #Satellite 01
 search_string_01 = "1 25544"
