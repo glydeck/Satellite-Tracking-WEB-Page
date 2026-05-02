@@ -16,6 +16,9 @@ This satellite tracker was Vibe Coded using **Anthropic Claude AI** strictly as 
 ### Example:
 - [**See it Work**](http://glydeck.com/satellite/satellite_tracker.html)
 
+### Video:
+- [**Usage Instructions for Updating TLEs**](https://youtu.be/JAOhoZj5g88)
+
 ### Requirements
 To use the **satellite_tracker.html** the only requirements is an Internet web browser. To use the Jupyter Notebook version of the updater requires running an instance of **Jupyter Lab (https://jupyter.org/)**. The stand alone python version of the updater requires Python 3. Both the Jupyter Lab version and Python 3 version will require that the **"requests"** module be installed.
 
